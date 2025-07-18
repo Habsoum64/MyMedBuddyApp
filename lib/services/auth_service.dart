@@ -254,6 +254,12 @@ class AuthService {
     _currentUser = null;
   }
 
+  // Clear user data (for provider cleanup on logout)
+  void clearUserData() {
+    _currentUserId = null;
+    _currentUser = null;
+  }
+
   // Set user session
   Future<void> _setUserSession(String userId, String email) async {
     final prefs = await SharedPreferences.getInstance();

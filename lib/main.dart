@@ -50,15 +50,20 @@ void main() async {
   );
 }
 
-class MyMedBuddyApp extends StatelessWidget {
+class MyMedBuddyApp extends ConsumerWidget {
   const MyMedBuddyApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
-        ChangeNotifierProvider(create: (_) => MedicationProvider()),
+        ChangeNotifierProvider(create: (_) {
+          final medicationProvider = MedicationProvider();
+          // Pass the Riverpod container to medication provider for cross-provider sync
+          medicationProvider.setRiverpodContainer(ProviderScope.containerOf(context));
+          return medicationProvider;
+        }),
         ChangeNotifierProvider(create: (_) => AppointmentProvider()),
         ChangeNotifierProvider(create: (_) => HealthTipProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),

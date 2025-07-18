@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/medication_log.dart';
 import '../services/database_service.dart';
+import '../services/auth_service.dart';
 
 // Health filter state
 class HealthFilterState {
@@ -42,19 +43,38 @@ class HealthFilterState {
 // Health filter notifier
 class HealthFilterNotifier extends StateNotifier<HealthFilterState> {
   final DatabaseService _databaseService;
+  final AuthService _authService;
 
-  HealthFilterNotifier(this._databaseService) : super(const HealthFilterState()) {
+  HealthFilterNotifier(this._databaseService, this._authService) : super(const HealthFilterState()) {
     _loadLogs();
   }
 
   Future<void> _loadLogs() async {
     state = state.copyWith(isLoading: true);
     try {
-      final logs = await _databaseService.getMedicationLogs(
+      // Get current user ID from auth service
+      final userId = _authService.currentUserId;
+      if (userId == null) {
+        state = state.copyWith(
+          filteredLogs: [],
+          isLoading: false,
+        );
+        return;
+      }
+
+      // Get user's medication logs by filtering for their medications
+      final userMedications = await _databaseService.getUserMedications(userId);
+      final userMedicationIds = userMedications.map((med) => med['id'] as String).toList();
+      
+      final allLogs = await _databaseService.getMedicationLogs(
         startDate: state.startDate,
         endDate: state.endDate,
       );
-      final filteredLogs = _applyFilters(logs);
+      
+      // Filter logs to only include those from user's medications
+      final userLogs = allLogs.where((log) => userMedicationIds.contains(log.medicationId)).toList();
+      final filteredLogs = _applyFilters(userLogs);
+      
       state = state.copyWith(
         filteredLogs: filteredLogs,
         isLoading: false,
@@ -107,13 +127,26 @@ class HealthFilterNotifier extends StateNotifier<HealthFilterState> {
   void refreshLogs() {
     _loadLogs();
   }
+
+  void clearUserData() {
+    state = const HealthFilterState();
+  }
+
+  // Method to refresh logs from external triggers (e.g., when MedicationProvider updates logs)
+  void refreshFromExternalUpdate() {
+    _loadLogs();
+  }
 }
 
 // Providers
 final databaseServiceProvider = Provider<DatabaseService>((ref) => DatabaseService());
+final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 
 final healthFilterProvider = StateNotifierProvider<HealthFilterNotifier, HealthFilterState>(
-  (ref) => HealthFilterNotifier(ref.read(databaseServiceProvider)),
+  (ref) => HealthFilterNotifier(
+    ref.read(databaseServiceProvider),
+    ref.read(authServiceProvider)
+  ),
 );
 
 // Computed providers

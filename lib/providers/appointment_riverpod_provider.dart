@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/appointment.dart';
 import '../services/database_service.dart';
+import '../services/auth_service.dart';
 import 'health_filter_provider.dart';
 
 // Appointment editing state
@@ -35,8 +36,9 @@ class AppointmentEditingState {
 // Appointment editing notifier
 class AppointmentEditingNotifier extends StateNotifier<AppointmentEditingState> {
   final DatabaseService _databaseService;
+  final AuthService _authService;
 
-  AppointmentEditingNotifier(this._databaseService) : super(const AppointmentEditingState());
+  AppointmentEditingNotifier(this._databaseService, this._authService) : super(const AppointmentEditingState());
 
   void startEditing(Appointment appointment) {
     state = state.copyWith(
@@ -54,6 +56,16 @@ class AppointmentEditingNotifier extends StateNotifier<AppointmentEditingState> 
     state = state.copyWith(isLoading: true, error: null);
     
     try {
+      // Verify user authentication
+      final userId = _authService.currentUserId;
+      if (userId == null) {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'User not authenticated',
+        );
+        return false;
+      }
+
       final appointmentMap = appointment.toMap();
       await _databaseService.updateUserAppointment(appointment.id, appointmentMap);
       state = const AppointmentEditingState();
@@ -71,6 +83,16 @@ class AppointmentEditingNotifier extends StateNotifier<AppointmentEditingState> 
     state = state.copyWith(isLoading: true, error: null);
     
     try {
+      // Verify user authentication
+      final userId = _authService.currentUserId;
+      if (userId == null) {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'User not authenticated',
+        );
+        return false;
+      }
+
       await _databaseService.deleteUserAppointment(appointmentId);
       state = const AppointmentEditingState();
       return true;
@@ -144,15 +166,26 @@ class AppointmentFilterState {
 // Appointment filter notifier
 class AppointmentFilterNotifier extends StateNotifier<AppointmentFilterState> {
   final DatabaseService _databaseService;
+  final AuthService _authService;
 
-  AppointmentFilterNotifier(this._databaseService) : super(const AppointmentFilterState()) {
+  AppointmentFilterNotifier(this._databaseService, this._authService) : super(const AppointmentFilterState()) {
     _loadAppointments();
   }
 
   Future<void> _loadAppointments() async {
     state = state.copyWith(isLoading: true);
     try {
-      final appointmentMaps = await _databaseService.getUserAppointments('current_user');
+      // Get current user ID from auth service
+      final userId = _authService.currentUserId;
+      if (userId == null) {
+        state = state.copyWith(
+          filteredAppointments: [],
+          isLoading: false,
+        );
+        return;
+      }
+
+      final appointmentMaps = await _databaseService.getUserAppointments(userId);
       final appointments = appointmentMaps.map((map) => Appointment.fromMap(map)).toList();
       final filteredAppointments = _applyFilters(appointments);
       state = state.copyWith(
@@ -222,15 +255,27 @@ class AppointmentFilterNotifier extends StateNotifier<AppointmentFilterState> {
   void refreshAppointments() {
     _loadAppointments();
   }
+
+  void clearUserData() {
+    state = const AppointmentFilterState();
+  }
 }
 
 // Providers
+final authServiceProvider = Provider<AuthService>((ref) => AuthService());
+
 final appointmentEditingProvider = StateNotifierProvider<AppointmentEditingNotifier, AppointmentEditingState>(
-  (ref) => AppointmentEditingNotifier(ref.read(databaseServiceProvider)),
+  (ref) => AppointmentEditingNotifier(
+    ref.read(databaseServiceProvider),
+    ref.read(authServiceProvider)
+  ),
 );
 
 final appointmentFilterProvider = StateNotifierProvider<AppointmentFilterNotifier, AppointmentFilterState>(
-  (ref) => AppointmentFilterNotifier(ref.read(databaseServiceProvider)),
+  (ref) => AppointmentFilterNotifier(
+    ref.read(databaseServiceProvider), 
+    ref.read(authServiceProvider)
+  ),
 );
 
 // Computed providers

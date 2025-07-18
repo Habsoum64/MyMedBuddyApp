@@ -1,15 +1,37 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/medication.dart';
 import '../models/medication_log.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../services/notification_service.dart';
+import 'health_filter_provider.dart';
 
 class MedicationProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
   final DatabaseService _databaseService = DatabaseService();
   final NotificationService _notificationService = NotificationService();
+  
+  // Riverpod container for syncing with health filter provider
+  ProviderContainer? _riverpodContainer;
+
+  // Method to set the Riverpod container for cross-provider communication
+  void setRiverpodContainer(ProviderContainer container) {
+    _riverpodContainer = container;
+  }
+
+  // Method to sync with Riverpod health filter provider
+  void _syncWithHealthFilterProvider() {
+    if (_riverpodContainer != null) {
+      try {
+        // Trigger refresh of the health filter provider
+        _riverpodContainer!.read(healthFilterProvider.notifier).refreshFromExternalUpdate();
+      } catch (e) {
+        print('Error syncing with health filter provider: $e');
+      }
+    }
+  }
 
   List<Medication> _medications = [];
   List<MedicationLog> _medicationLogs = [];
@@ -706,6 +728,10 @@ class MedicationProvider extends ChangeNotifier {
       
       // Notify listeners to update UI
       notifyListeners();
+      
+      // Sync with Riverpod health filter provider for automatic refresh
+      _syncWithHealthFilterProvider();
+      
       _error = null;
     } catch (e) {
       _error = e.toString();
@@ -754,6 +780,10 @@ class MedicationProvider extends ChangeNotifier {
       
       // Notify listeners to update UI
       notifyListeners();
+      
+      // Sync with Riverpod health filter provider for automatic refresh
+      _syncWithHealthFilterProvider();
+      
       _error = null;
     } catch (e) {
       _error = e.toString();
